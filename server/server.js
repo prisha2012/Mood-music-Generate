@@ -25,12 +25,33 @@ app.use(cookieParser());
 app.use(morgan('dev'));
 
 // CORS configuration
+const allowedOrigins = [
+  'https://mood-music-generate.vercel.app', // Production frontend
+  'http://localhost:3000', // Local development
+  'http://localhost:5173'  // Common Vite dev server port
+];
+
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true,
-  optionsSuccessStatus: 200
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if the origin is in the allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true, // Allow cookies to be sent with requests
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 };
 app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
 
 // Database connection
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/mood-music')
