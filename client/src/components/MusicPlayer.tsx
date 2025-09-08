@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, SkipForward, ExternalLink, Heart, Music, Plus } from 'lucide-react';
 import { Mood, Track, Language } from '../types';
-import { SAMPLE_VIDEOS } from '../utils/constants';
+import { SAMPLE_VIDEOS, MOODS } from '../utils/constants';
 import { useFavorites } from '../hooks/useFavorites';
 
 interface MusicPlayerProps {
@@ -23,7 +23,9 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
   const fetchPlaylist = async (mood: Mood, language: Language): Promise<Track[]> => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/playlist/${mood}/${language}`);
+      // Always fetch exactly 10 songs
+      const limit = 10;
+      const response = await fetch(`/api/playlist/${mood.id}/${language}?limit=${limit}`);
       
       if (!response.ok) {
         throw new Error('Failed to fetch playlist');
@@ -40,13 +42,45 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
           videoId: song.youtubeId,
           thumbnail: song.thumbnail || `https://img.youtube.com/vi/${song.youtubeId}/maxresdefault.jpg`,
           language: song.language,
-          mood: song.mood
+          mood: song.mood,
+          duration: song.duration || 'PT0S' // Default duration if not provided
         }));
       }
       
+      // Fallback to sample videos if no songs found
+      console.warn('No songs found, using sample videos');
+      const moodId = mood.id as keyof typeof SAMPLE_VIDEOS;
+      const sampleVideoId = SAMPLE_VIDEOS[moodId]?.[language];
+      if (sampleVideoId) {
+        return [{
+          id: 'sample-1',
+          title: 'Sample Track',
+          artist: 'Artist',
+          videoId: sampleVideoId,
+          thumbnail: `https://img.youtube.com/vi/${sampleVideoId}/maxresdefault.jpg`,
+          language,
+          mood: mood.id,
+          duration: 'PT3M30S'
+        }];
+      }
       return [];
     } catch (error) {
-      console.error('Error fetching playlist:', error);
+      console.error('Error fetching playlist, using fallback:', error);
+      // Fallback to sample videos on error
+      const moodId = mood.id as keyof typeof SAMPLE_VIDEOS;
+      const sampleVideoId = SAMPLE_VIDEOS[moodId]?.[language];
+      if (sampleVideoId) {
+        return [{
+          id: 'sample-1',
+          title: 'Sample Track',
+          artist: 'Artist',
+          videoId: sampleVideoId,
+          thumbnail: `https://img.youtube.com/vi/${sampleVideoId}/maxresdefault.jpg`,
+          language,
+          mood: mood.id,
+          duration: 'PT3M30S'
+        }];
+      }
       return [];
     } finally {
       setIsLoading(false);
