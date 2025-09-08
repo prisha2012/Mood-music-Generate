@@ -1,82 +1,45 @@
 import axios from 'axios';
-import { Quote, Song, User } from '../types';
+import { Quote } from '../types';
 
-// Backend URL from Vercel environment
-const API_URL = import.meta.env.VITE_API_URL;
+const QUOTABLE_BASE_URL = 'https://api.quotable.io';
 
-// ----------------- Playlists -----------------
-export const getPlaylist = async (mood: string, language: string): Promise<Song[]> => {
+export const fetchQuotesByTags = async (tags: string | string[]): Promise<Quote> => {
   try {
-    const res = await axios.get(`${API_URL}/playlist/${mood}/${language}`, { withCredentials: true });
-    return res.data;
-  } catch (err) {
-    console.error('Failed to fetch playlist:', err);
-    return [];
-  }
-};
-
-export const addSongToPlaylist = async (songId: string, mood: string, language: string) => {
-  const res = await axios.post(`${API_URL}/playlist/add`, { songId, mood, language }, { withCredentials: true });
-  return res.data;
-};
-
-// ----------------- Quotes -----------------
-export const fetchQuotesByMood = async (mood: string): Promise<Quote[]> => {
-  try {
-    const res = await axios.get(`${API_URL}/quotes/${mood}`, { withCredentials: true });
-    return res.data;
-  } catch (err) {
-    console.error('Backend fetch failed, falling back to public API');
-    const fallback = await axios.get('https://api.quotable.io/random', {
-      params: { tags: 'motivational', maxLength: 150 }
+    // Convert single tag to array if needed
+    const tagList = Array.isArray(tags) ? tags : [tags];
+    const tagsParam = tagList.join('|');
+    
+    const response = await axios.get(`${QUOTABLE_BASE_URL}/random`, {
+      params: {
+        tags: tagsParam,
+        maxLength: 150
+      }
     });
-    return [fallback.data];
+    
+    // Transform the response to match our Quote interface
+    const quoteData = response.data;
+    return {
+      _id: quoteData._id || Math.random().toString(36).substr(2, 9),
+      content: quoteData.content,
+      author: quoteData.author,
+      tags: quoteData.tags || [],
+      authorSlug: quoteData.authorSlug || quoteData.author?.toLowerCase().replace(/\s+/g, '-') || 'unknown',
+      length: quoteData.length || quoteData.content?.length || 0
+    };
+  } catch (error) {
+    console.error('Error fetching quote:', error);
+    // Fallback to a default quote
+    return {
+      _id: 'fallback-quote',
+      content: 'The only way to do great work is to love what you do.',
+      author: 'Steve Jobs',
+      tags: ['motivational', 'work'],
+      authorSlug: 'steve-jobs',
+      length: 52
+    };
   }
 };
 
-export const addQuote = async (content: string, author: string, mood: string) => {
-  const res = await axios.post(`${API_URL}/quotes`, { content, author, mood }, { withCredentials: true });
-  return res.data;
-};
-
-// ----------------- Favorites -----------------
-export const getFavorites = async () => {
-  const res = await axios.get(`${API_URL}/favorites`, { withCredentials: true });
-  return res.data;
-};
-
-export const addFavorite = async (itemType: 'song' | 'quote', itemId: string) => {
-  const res = await axios.post(`${API_URL}/favorites`, { itemType, itemId }, { withCredentials: true });
-  return res.data;
-};
-
-export const removeFavorite = async (itemId: string) => {
-  const res = await axios.delete(`${API_URL}/favorites/${itemId}`, { withCredentials: true });
-  return res.data;
-};
-
-// ----------------- Auth -----------------
-export const registerUser = async (name: string, email: string, password: string) => {
-  const res = await axios.post(`${API_URL}/auth/register`, { name, email, password }, { withCredentials: true });
-  return res.data;
-};
-
-export const loginUser = async (email: string, password: string) => {
-  const res = await axios.post(`${API_URL}/auth/login`, { email, password }, { withCredentials: true });
-  return res.data;
-};
-
-export const logoutUser = async () => {
-  const res = await axios.get(`${API_URL}/auth/logout`, { withCredentials: true });
-  return res.data;
-};
-
-export const getCurrentUser = async (): Promise<User> => {
-  const res = await axios.get(`${API_URL}/auth/me`, { withCredentials: true });
-  return res.data;
-};
-
-// ----------------- YouTube Helpers -----------------
 export const getYouTubeEmbedUrl = (videoId: string): string => {
   return `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0&showinfo=0`;
 };
@@ -85,15 +48,27 @@ export const getYouTubeMusicUrl = (videoId: string): string => {
   return `https://music.youtube.com/watch?v=${videoId}`;
 };
 
-// ----------------- Share Quotes -----------------
-export const shareQuote = (quote: Quote, platform: 'twitter' | 'whatsapp'): void => {
-  const text = `"${quote.content}" - ${quote.author}`;
-  
-  if (platform === 'twitter') {
-    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-  } else if (platform === 'whatsapp') {
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+export const shareQuote = (quote: Quote, platform: 'twitter' | 'whatsapp' = 'twitter'): void => {
+  try {
+    if (!quote || !quote.content) {
+      console.error('Invalid quote data');
+      return;
+    }
+
+    const author = quote.author || 'Unknown';
+    const text = `"${quote.content}" - ${author}`;
+    let shareUrl = '';
+    
+    if (platform === 'twitter') {
+      shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+    } else if (platform === 'whatsapp') {
+      shareUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    }
+
+    if (shareUrl && typeof window !== 'undefined') {
+      window.open(shareUrl, '_blank', 'noopener,noreferrer');
+    }
+  } catch (error) {
+    console.error('Error sharing quote:', error);
   }
 };
