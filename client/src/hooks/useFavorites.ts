@@ -33,11 +33,29 @@ export const useFavorites = () => {
     saveFavorites(newFavorites);
   };
 
-  const isFavorite = (type: 'quote' | 'track', itemId: string) => {
-    return favorites.some(fav => 
-      fav.type === type && 
-      (fav.data as any)._id === itemId || (fav.data as any).id === itemId
-    );
+  const isFavorite = (type: 'quote' | 'track', item: Quote | Track | string): boolean => {
+    // If item is a string, treat it as an ID
+    if (typeof item === 'string') {
+      return favorites.some(fav => 
+        fav.type === type && 
+        ((fav.data as any)._id === item || (fav.data as any).id === item)
+      );
+    }
+    
+    // If item is an object, check both _id and id fields
+    return favorites.some(fav => {
+      if (fav.type !== type) return false;
+      
+      const favData = fav.data as any;
+      const itemData = item as any;
+      
+      return (
+        favData._id === itemData._id || 
+        favData.id === itemData.id ||
+        favData._id === itemData.id ||
+        favData.id === itemData._id
+      );
+    });
   };
 
   return {
