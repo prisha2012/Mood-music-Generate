@@ -203,88 +203,99 @@ const FALLBACK_QUOTES = {
 
 // Helper function to fetch a quote from Quotable API with fallback
 async function fetchQuoteFromQuotable(mood, res) {
-  // First try to get a random fallback quote
-  const getFallbackQuote = () => {
-    const fallbacks = FALLBACK_QUOTES[mood] || FALLBACK_QUOTES.motivated;
-    const randomIndex = Math.floor(Math.random() * fallbacks.length);
-    return {
-      ...fallbacks[randomIndex],
+  try {
+    // First try to get a random quote from our database
+    const localQuote = await Quote.aggregate([
+      { $match: { mood, isApproved: true } },
+      { $sample: { size: 1 } }
+    ]);
+
+    if (localQuote && localQuote.length > 0) {
+      return res.status(200).json({
+        success: true,
+        data: localQuote[0],
+        isFallback: false
+      });
+    }
+
+    // If no local quotes, try Quotable API
+    try {
+      // Map moods to Quotable API tags
+      const moodTags = {
+        happy: 'happiness|joy|positive|cheerful',
+        sad: 'sadness|emotional|melancholy',
+        energetic: 'energy|motivation|inspiration',
+        calm: 'peace|calm|serenity',
+        romantic: 'love|romance|heart',
+        motivated: 'motivation|inspiration|determination'
+      };
+
+      const tags = moodTags[mood] || 'inspiration';
+      
+      const response = await axios.get(`https://api.quotable.io/random`, {
+        params: {
+          tags: tags,
+          maxLength: 150
+        },
+        timeout: 5000 // 5 second timeout
+      });
+      
+      const quote = {
+        content: response.data.content,
+        author: response.data.author || 'Unknown',
+        mood,
+        source: 'quotable',
+        isApproved: true
+      };
+
+      // Save the quote to our database for future use
+      const savedQuote = await Quote.create(quote);
+      
+      return res.status(200).json({
+        success: true,
+        data: savedQuote,
+        isFallback: false
+      });
+      
+    } catch (apiError) {
+      console.error('Error fetching from Quotable API:', apiError.message);
+      // Continue to fallback quotes
+    }
+    
+    // If we get here, both database and API failed - use fallback quotes
+    const fallbackQuotes = FALLBACK_QUOTES[mood] || FALLBACK_QUOTES.happy;
+    const randomQuote = fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
+    
+    const fallback = {
+      content: randomQuote.content,
+      author: randomQuote.author,
       mood,
-      tags: [mood],
       source: 'fallback',
       isApproved: true
     };
-  };
-
-  try {
-    // Try to fetch from Quotable API
-    const moodToTags = {
-      happy: ['happiness', 'joy', 'optimism'],
-      sad: ['sadness', 'hope', 'inspirational'],
-      energetic: ['energy', 'motivational', 'determination'],
-      calm: ['peace', 'mindfulness', 'serenity'],
-      romantic: ['love', 'romance', 'affection'],
-      motivated: ['inspirational', 'determination', 'success']
-    };
-
-    const tags = moodToTags[mood] || ['inspirational'];
-    const tagsParam = tags.join('|');
-
-    const response = await axios.get('https://api.quotable.io/random', {
-      params: {
-        tags: tagsParam,
-        maxLength: 150
-      },
-      timeout: 3000 // 3 second timeout
-    });
-
-    const { content, author, tags: quoteTags } = response.data;
-
-    try {
-      // Save the quote to our database for future use
-      const newQuote = await Quote.create({
-        content,
-        author,
-        mood,
-        tags: quoteTags || [mood],
-        source: 'quotable',
-        externalId: response.data._id,
-        isApproved: true
-      });
-
-      return res.status(200).json({
-        success: true,
-        data: newQuote,
-        fromExternal: true
-      });
-    } catch (dbError) {
-      console.error('Database save error, using API response directly:', dbError);
-      return res.status(200).json({
-        success: true,
-        data: {
-          content,
-          author,
-          mood,
-          tags: quoteTags || [mood],
-          source: 'quotable',
-          isApproved: true,
-          _id: 'temp_' + Date.now()
-        },
-        fromExternal: true
-      });
-    }
-  } catch (error) {
-    console.error('Quotable API Error, using fallback quote:', error.message);
     
-    // Return a fallback quote
-    const fallbackQuote = getFallbackQuote();
+    // Save the fallback quote to our database
+    const savedFallback = await Quote.create(fallback);
+    
+    return res.status(200).json({
+      success: true,
+      data: savedFallback,
+      isFallback: true
+    });
+    
+  } catch (error) {
+    console.error('Unexpected error in fetchQuoteFromQuotable:', error);
+    // Return a hardcoded fallback as last resort
     return res.status(200).json({
       success: true,
       data: {
-        ...fallbackQuote,
-        _id: 'fallback_' + Date.now()
+        content: 'The only way to do great work is to love what you do.',
+        author: 'Steve Jobs',
+        mood: mood,
+        source: 'hardcoded',
+        isApproved: true
       },
-      fromFallback: true
+      isFallback: true
     });
   }
 }
