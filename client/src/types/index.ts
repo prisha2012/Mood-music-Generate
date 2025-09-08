@@ -26,6 +26,8 @@ export interface Track {
   artist: string;
   videoId: string;
   thumbnail: string;
+  mood?: string;
+  language?: string;
   duration?: string;
 }
 
