@@ -173,10 +173,51 @@ export const unlikeQuote = async (req, res, next) => {
   }
 };
 
-// Helper function to fetch a quote from Quotable API
+// Fallback quotes for each mood
+const FALLBACK_QUOTES = {
+  happy: [
+    { content: "Happiness is not something ready made. It comes from your own actions.", author: "Dalai Lama" },
+    { content: "The best way to cheer yourself is to try to cheer somebody else up.", author: "Mark Twain" }
+  ],
+  sad: [
+    { content: "The way sadness works is one of the strange riddles of the world.", author: "Lemony Snicket" },
+    { content: "Tears are words that need to be written.", author: "Paulo Coelho" }
+  ],
+  energetic: [
+    { content: "Energy and persistence conquer all things.", author: "Benjamin Franklin" },
+    { content: "The energy of the mind is the essence of life.", author: "Aristotle" }
+  ],
+  calm: [
+    { content: "Calm mind brings inner strength and self-confidence, so that's very important for good health.", author: "Dalai Lama" },
+    { content: "The more tranquil a man becomes, the greater is his success, his influence, his power for good.", author: "James Allen" }
+  ],
+  romantic: [
+    { content: "The best thing to hold onto in life is each other.", author: "Audrey Hepburn" },
+    { content: "Love is composed of a single soul inhabiting two bodies.", author: "Aristotle" }
+  ],
+  motivated: [
+    { content: "The future belongs to those who believe in the beauty of their dreams.", author: "Eleanor Roosevelt" },
+    { content: "Believe you can and you're halfway there.", author: "Theodore Roosevelt" }
+  ]
+};
+
+// Helper function to fetch a quote from Quotable API with fallback
 async function fetchQuoteFromQuotable(mood, res) {
+  // First try to get a random fallback quote
+  const getFallbackQuote = () => {
+    const fallbacks = FALLBACK_QUOTES[mood] || FALLBACK_QUOTES.motivated;
+    const randomIndex = Math.floor(Math.random() * fallbacks.length);
+    return {
+      ...fallbacks[randomIndex],
+      mood,
+      tags: [mood],
+      source: 'fallback',
+      isApproved: true
+    };
+  };
+
   try {
-    // Map our moods to Quotable tags
+    // Try to fetch from Quotable API
     const moodToTags = {
       happy: ['happiness', 'joy', 'optimism'],
       sad: ['sadness', 'hope', 'inspirational'],
@@ -193,29 +234,57 @@ async function fetchQuoteFromQuotable(mood, res) {
       params: {
         tags: tagsParam,
         maxLength: 150
-      }
+      },
+      timeout: 3000 // 3 second timeout
     });
 
     const { content, author, tags: quoteTags } = response.data;
 
-    // Save the quote to our database for future use
-    const newQuote = await Quote.create({
-      content,
-      author,
-      mood,
-      tags: quoteTags || [],
-      source: 'quotable',
-      externalId: response.data._id,
-      isApproved: true
-    });
+    try {
+      // Save the quote to our database for future use
+      const newQuote = await Quote.create({
+        content,
+        author,
+        mood,
+        tags: quoteTags || [mood],
+        source: 'quotable',
+        externalId: response.data._id,
+        isApproved: true
+      });
 
-    res.status(200).json({
-      success: true,
-      data: newQuote,
-      fromExternal: true
-    });
+      return res.status(200).json({
+        success: true,
+        data: newQuote,
+        fromExternal: true
+      });
+    } catch (dbError) {
+      console.error('Database save error, using API response directly:', dbError);
+      return res.status(200).json({
+        success: true,
+        data: {
+          content,
+          author,
+          mood,
+          tags: quoteTags || [mood],
+          source: 'quotable',
+          isApproved: true,
+          _id: 'temp_' + Date.now()
+        },
+        fromExternal: true
+      });
+    }
   } catch (error) {
-    console.error('Quotable API Error:', error.message);
-    throw new Error('Failed to fetch quote from external service');
+    console.error('Quotable API Error, using fallback quote:', error.message);
+    
+    // Return a fallback quote
+    const fallbackQuote = getFallbackQuote();
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...fallbackQuote,
+        _id: 'fallback_' + Date.now()
+      },
+      fromFallback: true
+    });
   }
 }
