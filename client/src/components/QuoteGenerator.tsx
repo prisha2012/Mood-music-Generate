@@ -13,7 +13,12 @@ export const QuoteGenerator: React.FC<QuoteGeneratorProps> = ({ mood }) => {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { addToFavorites, isFavorite } = useFavorites();
+  const { 
+    favorites, 
+    addToFavorites, 
+    removeFromFavorites, 
+    isFavorite 
+  } = useFavorites();
 
   const fetchNewQuote = async () => {
     setIsLoading(true);
@@ -35,7 +40,18 @@ export const QuoteGenerator: React.FC<QuoteGeneratorProps> = ({ mood }) => {
 
   const handleFavorite = () => {
     if (quote) {
-      addToFavorites('quote', quote);
+      if (isFavorite('quote', quote)) {
+        // Find and remove the favorite if it exists
+        const favorite = favorites.find(fav => 
+          fav.type === 'quote' && 
+          ((fav.data as any)._id === quote._id || (fav.data as any).id === quote._id)
+        );
+        if (favorite) {
+          removeFromFavorites(favorite.id);
+        }
+      } else {
+        addToFavorites('quote', quote);
+      }
     }
   };
 
@@ -112,17 +128,23 @@ export const QuoteGenerator: React.FC<QuoteGeneratorProps> = ({ mood }) => {
               </button>
             </div>
             
-            <button
-              onClick={handleFavorite}
-              className={`p-2 rounded-lg transition-colors ${
-                isFavorite('quote', quote._id)
-                  ? 'bg-red-500 text-white'
-                  : 'bg-white/20 hover:bg-white/30 text-white'
-              }`}
-              title="Add to favorites"
-            >
-              <Heart className="w-4 h-4" />
-            </button>
+            <div className="flex items-center space-x-4 mt-6">
+              <button
+                onClick={handleFavorite}
+                disabled={!quote}
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                  quote && isFavorite('quote', quote)
+                    ? 'bg-red-500 hover:bg-red-600 text-white' 
+                    : 'bg-white/10 hover:bg-white/20 text-white/80 disabled:opacity-50 disabled:cursor-not-allowed'
+                }`}
+              >
+                <Heart 
+                  size={18} 
+                  className={quote && isFavorite('quote', quote) ? 'fill-current' : ''} 
+                />
+                <span>{quote && isFavorite('quote', quote) ? 'Favorited' : 'Favorite'}</span>
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
