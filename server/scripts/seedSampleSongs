@@ -1,0 +1,165 @@
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+import Song from '../models/Song.js';
+
+dotenv.config();
+
+const MONGODB_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/mood-music';
+
+// Sample data for different moods and languages
+const SAMPLE_SONGS = [
+  // Happy Mood
+  {
+    title: 'Happy Pop Song',
+    artist: 'Upbeat Artist',
+    youtubeId: 'dQw4w9WgXcQ',
+    mood: 'happy',
+    language: 'english',
+    description: 'An uplifting pop song to brighten your day',
+    duration: 'PT3M30S',
+    viewCount: 1000000,
+    likeCount: 50000,
+    isExplicit: false,
+    tags: ['pop', 'upbeat', 'summer']
+  },
+  {
+    title: 'खुशियों भरा गाना',
+    artist: 'हिंदी कलाकार',
+    youtubeId: 'abcdefghijk',
+    mood: 'happy',
+    language: 'hindi',
+    description: 'एक खुशनुमा हिंदी गाना',
+    duration: 'PT4M15S',
+    viewCount: 2500000,
+    likeCount: 150000,
+    isExplicit: false,
+    tags: ['bollywood', 'dance', 'party']
+  },
+  
+  // Sad Mood
+  {
+    title: 'Melancholy Melody',
+    artist: 'Sad Singer',
+    youtubeId: 'lmnopqrstuv',
+    mood: 'sad',
+    language: 'english',
+    description: 'A soulful ballad for when you\'re feeling blue',
+    duration: 'PT4M45S',
+    viewCount: 850000,
+    likeCount: 45000,
+    isExplicit: false,
+    tags: ['ballad', 'emotional', 'acoustic']
+  },
+  
+  // Energetic Mood
+  {
+    title: 'Power Workout Mix',
+    artist: 'Energy DJ',
+    youtubeId: 'wxyzaBcDeFg',
+    mood: 'energetic',
+    language: 'english',
+    description: 'High-energy mix for workouts and parties',
+    duration: 'PT1H2M30S',
+    viewCount: 3500000,
+    likeCount: 200000,
+    isExplicit: true,
+    tags: ['workout', 'edm', 'party']
+  },
+  
+  // Calm Mood
+  {
+    title: 'Peaceful Piano',
+    artist: 'Calm Composer',
+    youtubeId: 'hijklmnopqr',
+    mood: 'calm',
+    language: 'english',
+    description: 'Gentle piano music for relaxation and focus',
+    duration: 'PT2H15M0S',
+    viewCount: 1200000,
+    likeCount: 95000,
+    isExplicit: false,
+    tags: ['piano', 'relaxing', 'study']
+  },
+  
+  // Romantic Mood
+  {
+    title: 'Romantic Evening',
+    artist: 'Love Singer',
+    youtubeId: 'stuvwxyz123',
+    mood: 'romantic',
+    language: 'hindi',
+    description: 'रोमांटिक शाम के लिए ख़ास गाना',
+    duration: 'PT5M20S',
+    viewCount: 1800000,
+    likeCount: 120000,
+    isExplicit: false,
+    tags: ['romantic', 'bollywood', 'love']
+  },
+  
+  // Motivated Mood
+  {
+    title: 'Punjabi Power',
+    artist: 'ਪੰਜਾਬੀ ਗਾਇਕ',
+    youtubeId: '456789abcdef',
+    mood: 'motivated',
+    language: 'punjabi',
+    description: 'ਪੰਜਾਬੀ ਗੀਤ ਜੋ ਤੁਹਾਨੂੰ ਉਤਸ਼ਾਹਿਤ ਕਰੇਗਾ',
+    duration: 'PT3M50S',
+    viewCount: 4200000,
+    likeCount: 350000,
+    isExplicit: false,
+    tags: ['bhangra', 'motivational', 'punjabi']
+  }
+];
+
+async function seedDatabase() {
+  try {
+    console.log('Starting database seeding...');
+    
+    // Connect to MongoDB
+    await mongoose.connect(MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('Connected to MongoDB');
+
+    // Clear existing data
+    await Song.deleteMany({});
+    console.log('Cleared existing songs');
+
+    // Add sample admin user ID (replace with actual admin user ID)
+    const adminUserId = new mongoose.Types.ObjectId('5f8d0d55b54764421b7156da');
+    
+    // Prepare songs with additional fields
+    const songsToInsert = SAMPLE_SONGS.map(song => ({
+      ...song,
+      addedBy: adminUserId,
+      isApproved: true,
+      thumbnail: `https://img.youtube.com/vi/${song.youtubeId}/maxresdefault.jpg`,
+      publishedAt: new Date(),
+      metadata: {
+        source: 'youtube',
+        isSample: true,
+        addedManually: true
+      }
+    }));
+
+    // Insert sample data
+    const result = await Song.insertMany(songsToInsert);
+    console.log(`Successfully seeded ${result.length} songs`);
+    
+    // Create indexes
+    await Song.syncIndexes();
+    console.log('Indexes synchronized');
+    
+    process.exit(0);
+  } catch (error) {
+    console.error('Error seeding database:', error);
+    process.exit(1);
+  } finally {
+    await mongoose.disconnect();
+  }
+}
+
+// Run the seed function
+seedDatabase();
