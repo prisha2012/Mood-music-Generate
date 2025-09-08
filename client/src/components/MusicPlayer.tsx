@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, SkipForward, ExternalLink, Heart, Music, Plus } from 'lucide-react';
 import { Mood, Track, Language } from '../types';
-import { SAMPLE_VIDEOS, MOODS } from '../utils/constants';
+import { SAMPLE_VIDEOS } from '../utils/constants';
 import { useFavorites } from '../hooks/useFavorites';
 
 interface MusicPlayerProps {
@@ -17,58 +17,82 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddMore, setShowAddMore] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const playerRef = useRef<HTMLIFrameElement>(null);
   const { addToFavorites, isFavorite } = useFavorites();
+
+  // Refresh playlist function
+  const refreshPlaylist = async () => {
+    if (!mood || !language) return;
+    
+    try {
+      setIsRefreshing(true);
+      setError(null);
+      const tracks = await fetchPlaylist(mood, language);
+      setPlaylist(tracks);
+      setCurrentTrack(tracks[0] || null);
+      setCurrentIndex(0);
+      setIsPlaying(true); // Auto-play after refresh
+      return tracks;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to refresh playlist';
+      setError(errorMessage);
+      console.error('Refresh error:', err);
+      return [];
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Fetch playlist from backend API based on mood and language
   const fetchPlaylist = async (mood: Mood, language: Language): Promise<Track[]> => {
     try {
-      setIsLoading(true);
-      // Always fetch exactly 10 songs
-      const limit = 10;
-      const response = await fetch(`/api/playlist/${mood.id}/${language}?limit=${limit}`);
+      if (!isRefreshing) {
+        setIsLoading(true);
+      }
+      
+      // Fetch 10 songs from the API
+      setError(null);
+      const response = await fetch(`/api/playlist/${mood.id}/${language}?limit=10`);
       
       if (!response.ok) {
-        throw new Error('Failed to fetch playlist');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.json();
+      const result = await response.json();
       
-      if (data.success && data.data?.songs) {
-        // Transform the API response to match the Track interface
-        return data.data.songs.map((song: any) => ({
-          id: song._id,
-          title: song.title,
-          artist: song.artist || 'Unknown Artist',
-          videoId: song.youtubeId,
-          thumbnail: song.thumbnail || `https://img.youtube.com/vi/${song.youtubeId}/maxresdefault.jpg`,
-          language: song.language,
-          mood: song.mood,
-          duration: song.duration || 'PT0S' // Default duration if not provided
-        }));
+      if (!result.success || !result.data?.songs) {
+        throw new Error('Invalid response format from server');
       }
       
-      // Fallback to sample videos if no songs found
-      console.warn('No songs found, using sample videos');
-      const moodId = mood.id as keyof typeof SAMPLE_VIDEOS;
-      const sampleVideoId = SAMPLE_VIDEOS[moodId]?.[language];
-      if (sampleVideoId) {
-        return [{
-          id: 'sample-1',
-          title: 'Sample Track',
-          artist: 'Artist',
-          videoId: sampleVideoId,
-          thumbnail: `https://img.youtube.com/vi/${sampleVideoId}/maxresdefault.jpg`,
-          language,
-          mood: mood.id,
-          duration: 'PT3M30S'
-        }];
+      // Transform the API response to match the Track interface
+      const tracks = result.data.songs.map((song: any, index: number) => ({
+        id: song._id || `track-${index}-${Date.now()}`,
+        title: song.title || `Track ${index + 1}`,
+        artist: song.artist || 'Unknown Artist',
+        videoId: song.youtubeId,
+        thumbnail: song.thumbnail || `https://img.youtube.com/vi/${song.youtubeId}/maxresdefault.jpg`,
+        language: song.language || language,
+        mood: song.mood || mood.id,
+        duration: song.duration || 'PT3M30S'
+      }));
+      
+      if (tracks.length === 0) {
+        console.warn('No songs found in the response');
+        throw new Error('No songs found');
       }
-      return [];
+      
+      return tracks;
+      
     } catch (error) {
-      console.error('Error fetching playlist, using fallback:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load playlist';
+      setError(errorMessage);
+      console.error('Error fetching playlist:', error);
       // Fallback to sample videos on error
       const moodId = mood.id as keyof typeof SAMPLE_VIDEOS;
       const sampleVideoId = SAMPLE_VIDEOS[moodId]?.[language];
+      
       if (sampleVideoId) {
         return [{
           id: 'sample-1',
@@ -81,6 +105,7 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
           duration: 'PT3M30S'
         }];
       }
+      
       return [];
     } finally {
       setIsLoading(false);
@@ -95,24 +120,40 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
         setPlaylist(tracks);
         setCurrentTrack(tracks[0] || null);
         setCurrentIndex(0);
-        setIsPlaying(false);
+        setIsPlaying(true); // Auto-play on load
       };
       
       loadPlaylist();
     }
   }, [mood, language]);
+  
+  // Handle auto-play when currentTrack changes
+  useEffect(() => {
+    if (currentTrack && isPlaying && playerRef.current) {
+      // The YouTube iframe API would be used here for actual playback control
+      // For now, we'll just log the play event
+      console.log('Playing:', currentTrack.title);
+    }
+  }, [currentTrack, isPlaying]);
 
   const handleNext = () => {
     if (currentIndex < playlist.length - 1) {
       const nextIndex = currentIndex + 1;
       setCurrentIndex(nextIndex);
       setCurrentTrack(playlist[nextIndex]);
+      setIsPlaying(true); // Auto-play next track
+    } else {
+      // If at the end of the playlist, loop back to the beginning
+      setCurrentIndex(0);
+      setCurrentTrack(playlist[0]);
+      setIsPlaying(true);
     }
   };
 
   const handleTrackSelect = (track: Track, index: number) => {
     setCurrentTrack(track);
     setCurrentIndex(index);
+    setIsPlaying(true); // Auto-play selected track
   };
 
   const handleFavorite = (track: Track) => {
@@ -142,14 +183,59 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
     );
   }
 
+  const renderError = () => (
+    error && (
+      <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">
+        <p className="font-bold">Error</p>
+        <p>{error}</p>
+      </div>
+    )
+  );
+
+  const renderRefreshButton = () => (
+    <button
+      onClick={refreshPlaylist}
+      disabled={isRefreshing}
+      className="flex items-center justify-center p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      title="Refresh Playlist"
+    >
+      {isRefreshing ? (
+        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      ) : (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
+        </svg>
+      )}
+    </button>
+  );
+
   return (
     <motion.div
       className="bg-white/15 dark:bg-black/25 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 dark:border-white/10 overflow-hidden"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
     >
-      {/* Header */}
       <div className="p-6 border-b border-white/15 dark:border-white/10">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-white">{mood.name} Playlist</h2>
+          <div className="flex items-center space-x-3">
+            {renderRefreshButton()}
+            <button
+              onClick={handleAddMoreSongs}
+              className={`p-2 rounded-full transition-colors ${showAddMore ? 'bg-blue-600 text-white' : 'bg-white/10 hover:bg-white/20 text-white'}`}
+              title="Add more songs"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+        
+        {renderError()}
+        
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-xl font-bold text-white mb-1">
@@ -160,13 +246,6 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
             </p>
           </div>
           <div className="flex items-center space-x-2">
-            <button
-              onClick={handleAddMoreSongs}
-              className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-colors"
-              title="Add more songs"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
             <Music className="w-8 h-8 text-white/70" />
           </div>
         </div>
