@@ -52,9 +52,20 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
         setIsLoading(true);
       }
       
+      // Ensure mood ID is in lowercase to match backend expectations
+      const moodId = mood.id.toLowerCase();
+      
       // Fetch 10 songs from the API
       setError(null);
-      const response = await fetch(`/api/playlist/${mood.id}/${language}?limit=10`);
+      const apiUrl = `https://mood-music-generate.onrender.com/api/playlist/${moodId}/${language}?limit=10`;
+      console.log('Fetching playlist from:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        credentials: 'include', // Include cookies for authenticated requests
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -62,8 +73,13 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
       
       const result = await response.json();
       
-      if (!result.success || !result.data?.songs) {
-        throw new Error('Invalid response format from server');
+      if (!result.success) {
+        throw new Error(result.message || 'Request failed');
+      }
+      
+      if (!result.data?.songs) {
+        console.error('Invalid response format:', result);
+        throw new Error('No songs found in the response');
       }
       
       // Transform the API response to match the Track interface
@@ -86,7 +102,19 @@ export const MusicPlayer: React.FC<MusicPlayerProps> = ({ mood, language }) => {
       return tracks;
       
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load playlist';
+      let errorMessage = 'Failed to load playlist';
+      
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack
+        });
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      
       setError(errorMessage);
       console.error('Error fetching playlist:', error);
       // Fallback to sample videos on error
