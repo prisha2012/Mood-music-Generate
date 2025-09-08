@@ -31,10 +31,12 @@ export const getPlaylist = async (req, res, next) => {
 
     // Build query with case-insensitive matching
     const query = { 
-      mood: { $regex: new RegExp(`^${normalizedMood}$`, 'i') },
-      language: { $regex: new RegExp(`^${normalizedLanguage}$`, 'i') },
+      mood: { $regex: `^${normalizedMood}$`, $options: 'i' },
+      language: { $regex: `^${normalizedLanguage}$`, $options: 'i' },
       isApproved: true
     };
+    
+    console.log('Searching for songs with query:', JSON.stringify(query, null, 2));
 
     console.log('Database query:', JSON.stringify(query, null, 2));
 
