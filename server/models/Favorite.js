@@ -30,32 +30,19 @@ const favoriteSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
-}, {
-  timestamps: true
-});
+}, { timestamps: true });
 
-// Compound index to ensure a user can only favorite an item once
+// Compound indexes
 favoriteSchema.index(
   { user: 1, song: 1 },
   { unique: true, partialFilterExpression: { song: { $exists: true } } }
 );
-
 favoriteSchema.index(
   { user: 1, quote: 1 },
   { unique: true, partialFilterExpression: { quote: { $exists: true } } }
 );
 
-// Virtual for getting the favorited item
-favoriteSchema.virtual('item', {
-  ref: function() {
-    return this.itemType;
-  },
-  localField: this.itemType,
-  foreignField: '_id',
-  justOne: true
-});
-
-// Pre-save hook to ensure only one of song or quote is set
+// Pre-save hook
 favoriteSchema.pre('validate', function(next) {
   if ((this.song && this.quote) || (!this.song && !this.quote)) {
     next(new Error('Must reference either a song or a quote, not both or neither'));
@@ -64,18 +51,15 @@ favoriteSchema.pre('validate', function(next) {
   }
 });
 
-// Static method to check if an item is favorited by a user
+// Static method
 favoriteSchema.statics.isFavorited = async function(userId, itemType, itemId) {
-  const query = {
-    user: userId,
-    itemType,
-    [itemType]: itemId
-  };
-  
+  const query = { user: userId, itemType };
+  if (itemType === 'song') query.song = itemId;
+  else query.quote = itemId;
+
   const count = await this.countDocuments(query);
   return count > 0;
 };
 
 const Favorite = mongoose.model('Favorite', favoriteSchema);
-
 export default Favorite;
