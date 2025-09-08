@@ -6,8 +6,6 @@ import { Home } from './pages/Home';
 import { About } from './pages/About';
 import { HowItWorks } from './pages/HowItWorks';
 import { Favorites } from './components/Favorites';
-import { LoginPage } from './pages/Login';
-import { RegisterPage } from './pages/Register';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('home');
@@ -22,10 +20,6 @@ function App() {
         return 'from-blue-600 via-indigo-600 to-purple-700';
       case 'how-it-works':
         return 'from-teal-500 via-cyan-600 to-blue-600';
-      case 'login':
-        return 'from-purple-400 to-pink-500';
-      case 'register':
-        return 'from-pink-400 to-orange-400';
       default:
         return 'from-indigo-500 via-purple-600 to-pink-600';
     }
@@ -34,17 +28,13 @@ function App() {
   const renderCurrentPage = () => {
     switch (currentPage) {
       case 'home':
-        return <Home onRequireLogin={() => setCurrentPage('login')} />;
+        return <Home />;
       case 'favorites':
         return <Favorites />;
       case 'about':
         return <About />;
       case 'how-it-works':
         return <HowItWorks />;
-      case 'login':
-        return <LoginPage onSwitchPage={setCurrentPage} />;
-      case 'register':
-        return <RegisterPage onSwitchPage={setCurrentPage} />;
       default:
         return <Home />;
     }
@@ -52,9 +42,12 @@ function App() {
 
   return (
     <div className="relative">
+      {/* Theme Toggle */}
       <div className="fixed top-4 right-4 z-50">
         <ThemeToggle />
       </div>
+
+      {/* Layout Wrapper */}
       <Layout
         currentPage={currentPage}
         onPageChange={setCurrentPage}
